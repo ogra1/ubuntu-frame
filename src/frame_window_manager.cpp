@@ -74,6 +74,41 @@ bool override_state(WindowSpecification& spec, WindowInfo const& window_info)
 
     return true;
 }
+
+auto is_ancestor(
+    miral::WindowManagerTools const& tools,
+    miral::Window const& maybe_parent,
+    miral::Window const& maybe_child) -> bool
+{
+    if (maybe_parent == maybe_child)
+    {
+        return false;
+    }
+    auto window = maybe_child;
+    while ((window = tools.info_for(window).parent()))
+    {
+        if (window == maybe_parent)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Returns true if selecting the new window consums the current input event
+auto selecting_window_consumes_event(
+    miral::WindowManagerTools const& tools,
+    miral::Window const& selected_window) -> bool
+{
+    auto const active = tools.active_window();
+    // Return true if a menu window is currently active and a parent is being selected.
+    // If we don't consume the event in this case popup menus appear after being dismissed.
+    // (see https://github.com/MirServer/mir/issues/1818)
+    return (
+        active &&
+        tools.info_for(active).type() == mir_window_type_menu &&
+        is_ancestor(tools, selected_window, active));
+}
 }
 
 bool FrameWindowManagerPolicy::handle_keyboard_event(MirKeyboardEvent const* event)
@@ -96,6 +131,18 @@ bool FrameWindowManagerPolicy::handle_touch_event(MirTouchEvent const* event)
 
     Point const cursor{total_x/count, total_y/count};
 
+    if (count == 1 && mir_touch_event_action(event, 0) == mir_touch_action_down)
+    {
+        if (auto const window = tools.window_at(cursor))
+        {
+            if (selecting_window_consumes_event(tools, window))
+            {
+                tools.select_active_window(tools.window_at(cursor));
+                return true;
+            }
+        }
+    }
+
     tools.select_active_window(tools.window_at(cursor));
 
     return false;
@@ -111,6 +158,14 @@ bool FrameWindowManagerPolicy::handle_pointer_event(MirPointerEvent const* event
 
     if (action == mir_pointer_action_button_down)
     {
+        if (auto const window = tools.window_at(cursor))
+        {
+            if (selecting_window_consumes_event(tools, window))
+            {
+                tools.select_active_window(window);
+                return true;
+            }
+        }
         tools.select_active_window(tools.window_at(cursor));
     }
 

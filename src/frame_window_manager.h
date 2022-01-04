@@ -54,6 +54,7 @@ public:
 
 private:
     bool application_zones_have_changed = false;
+    std::vector<std::weak_ptr<mir::scene::Surface>> popups_of_focused_surface;
 };
 
 #endif /* MIRAL_X11_KIOSK_WINDOW_MANAGER_H */
